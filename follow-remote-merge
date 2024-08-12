@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+function main() {
+    echo "$@"
+}
+
+function branch-exists() {
+    git show-ref --quiet refs/heads/"$1"
+}
+
+function follow-remote-merge() {
+    # $0: [target-branch]
+    #
+    # Follow a merge that was performed on a remote platform, e.g. GitHub or
+    # GitLab. If HEAD is to be found in the target branch, HEAD is
+    # switched to the target branch and the source branch is deleted.
+    #
+    # The target branch defaults to `develop`, `main`, or `master`, in that
+    # order.
+    #
+    # Example:
+    #  follow-remote-merge
+    #  follow-remote-merge develop
+
+    local target
+
+    if [[ -n "$1" ]]; then
+        # target given and exists
+        target="$1"
+    elif branch-exists "develop"; then
+        target=develop
+    elif branch-exists "main"; then
+        target=main
+    else
+        target=master
+    fi
+
+    if ! branch-exists "$target"; then
+        # target given but does not exist
+        echo "Target branch '$1' does not exist!" >&2
+        return 1
+    fi
+
+    local sourceBranch
+    sourceBranch=$(git branch --show-current)
+
+    git fetch origin "${target}:${target}"
+    if git diff --quiet "HEAD" "${target}" ||
+        # In $target enthalten, aber `$target` hat nachfolgende Änderungen.
+        git merge-base --is-ancestor HEAD "$target"; then
+        git switch "${target}"
+        git branch -D "${sourceBranch}"
+    else
+        echo "Found unmerged changes in ${sourceBranch}." >&2
+    fi
+
+}
+
+main "$@"
