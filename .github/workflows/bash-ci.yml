@@ -1,0 +1,15 @@
+name: Bash CI Pipeline
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install ShellCheck
+        run: sudo apt install shellcheck shfmt
+      - name: Check formatting with shfmt
+        run: shfmt -f . | xargs shfmt -d --indent 4 --case-indent
+      - name: Lint with ShellCheck
+        run: shfmt -f . | xargs shellcheck
