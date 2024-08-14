@@ -10,6 +10,17 @@ function branch-exists() {
     git show-ref --quiet refs/heads/"$1"
 }
 
+function get-default-target-branch() {
+    for branch in develop main master; do
+        if branch-exists $branch; then
+            echo $branch
+            return
+        fi
+    done
+    echo "None of the default branches exist!" >&2
+    exit 1
+}
+
 function follow-remote-merge() {
     # $0: [target-branch]
     #
@@ -24,7 +35,9 @@ function follow-remote-merge() {
     #  follow-remote-merge
     #  follow-remote-merge develop
 
-    local target
+    local target defaultTarget
+
+    defaultTarget=$(get-default-target-branch)
 
     if [[ -n "$1" ]]; then
         # target given and exists
