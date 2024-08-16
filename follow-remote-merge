@@ -2,12 +2,74 @@
 
 set -euo pipefail
 
+function print-usage() {
+    cat <<EOF
+$0: [OPTION]... [target-branch]
+
+Follow a merge that was performed on a remote platform, e.g. GitHub or GitLab.
+If HEAD is contained in the target branch, HEAD is switched to the target
+branch and the source branch is deleted.
+
+The target branch defaults to \`develop\`, \`main\`, or \`master\`, in that
+order.
+
+OPTIONS:
+
+  -C DIRECTORY Execute git commands in DIRECTORY. Defaults to PWD.
+  -f, --force  Skip checks when moving to target branch.
+  -h, --help   Print this message and exit.
+
+Examples:
+follow-remote-merge
+follow-remote-merge develop
+follow-remote-merge -C ~/repos/some-repo -f weird-default-branch
+EOF
+}
+
+function die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    echo "$msg" >&2
+    exit "$code"
+}
+
 function main() {
-    echo "$@"
+
+    local workingDirectory=.
+    local targetBranch
+    targetBranch=$(get-default-target-branch)
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h | --help)
+                print-usage
+                exit 0
+                ;;
+            -C)
+                shift
+                workingDirectory="$1"
+                ;;
+            -f | --force)
+                die "Force intended but not yet supported!"
+                ;;
+            *)
+                targetBranch="$1"
+                ;;
+        esac
+        shift
+    done
+
+    branch-exists "$targetBranch" ||
+        die "Target branch $targetBranch does not exist!"
+    test -d "$workingDirectory" ||
+        die "Working directory $workingDirectory does not exist!"
+
+    GIT_CMD="git -C $workingDirectory"
+    follow-remote-merge "$targetBranch"
 }
 
 function branch-exists() {
-    git show-ref --quiet refs/heads/"$1"
+    "$GIT_CMD" show-ref --quiet refs/heads/"$1"
 }
 
 function get-default-target-branch() {
@@ -35,40 +97,45 @@ function follow-remote-merge() {
     #  follow-remote-merge
     #  follow-remote-merge develop
 
-    local target defaultTarget
+    local target="$2"
+    local source
+    source=$(git branch --show-current)
 
-    defaultTarget=$(get-default-target-branch)
+    $GIT_CMD fetch origin "${target}:${target}"
 
-    if [[ -n "$1" ]]; then
-        # target given and exists
-        target="$1"
-    elif branch-exists "develop"; then
-        target=develop
-    elif branch-exists "main"; then
-        target=main
+    $GIT_CMD diff --quiet ||
+        die "Found uncommitted changes in ${source}."
+
+    if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
+        $GIT_CMD switch "${target}"
+        $GIT_CMD branch -D "${source}"
     else
-        target=master
+        die "Found unmerged changes in ${source}."
+    fi
+}
+
+function has-no-diff-commit() {
+    local target="$1"
+    local mergeBase
+
+    if is-ancestor-to "$target"; then
+        # efficient case first
+        return 0
     fi
 
-    if ! branch-exists "$target"; then
-        # target given but does not exist
-        echo "Target branch '$1' does not exist!" >&2
-        return 1
-    fi
+    # Iterate over all commits between mergeBase and the target branch and
+    # check if to one of these the diff is empty. This allows to detect squash
+    # merges at any point in the history.
+    mergeBase="$($GIT_CMD merge-base --fork-point "$target")"
+    $GIT_CMD log "$mergeBase".."$target" --oneline |
+        cut -f1 -d ' ' |
+        xargs -I% -n1 bash -c "echo $GIT_CMD diff --quiet %; echo \$?" |
+        grep -q 0
+}
 
-    local sourceBranch
-    sourceBranch=$(git branch --show-current)
-
-    git fetch origin "${target}:${target}"
-    if git diff --quiet "HEAD" "${target}" ||
-        # In $target enthalten, aber `$target` hat nachfolgende Änderungen.
-        git merge-base --is-ancestor HEAD "$target"; then
-        git switch "${target}"
-        git branch -D "${sourceBranch}"
-    else
-        echo "Found unmerged changes in ${sourceBranch}." >&2
-    fi
-
+function is-ancestor-to() {
+    local target="$1"
+    $GIT_CMD merge-base --is-ancestor HEAD "$target"
 }
 
 main "$@"
