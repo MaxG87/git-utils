@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -eu
 
 function print-usage() {
     cat <<EOF
@@ -37,7 +37,6 @@ function main() {
 
     local workingDirectory=.
     local targetBranch
-    targetBranch=$(get-default-target-branch)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -59,17 +58,21 @@ function main() {
         shift
     done
 
-    branch-exists "$targetBranch" ||
-        die "Target branch $targetBranch does not exist!"
     test -d "$workingDirectory" ||
         die "Working directory $workingDirectory does not exist!"
-
     GIT_CMD="git -C $workingDirectory"
+
+    if [[ ! -v targetBranch ]]; then
+        targetBranch=$(get-default-target-branch)
+    fi
+    branch-exists "$targetBranch" ||
+        die "Target branch $targetBranch does not exist!"
+
     follow-remote-merge "$targetBranch"
 }
 
 function branch-exists() {
-    "$GIT_CMD" show-ref --quiet refs/heads/"$1"
+    $GIT_CMD show-ref --quiet refs/heads/"$1"
 }
 
 function get-default-target-branch() {
@@ -84,22 +87,9 @@ function get-default-target-branch() {
 }
 
 function follow-remote-merge() {
-    # $0: [target-branch]
-    #
-    # Follow a merge that was performed on a remote platform, e.g. GitHub or
-    # GitLab. If HEAD is to be found in the target branch, HEAD is
-    # switched to the target branch and the source branch is deleted.
-    #
-    # The target branch defaults to `develop`, `main`, or `master`, in that
-    # order.
-    #
-    # Example:
-    #  follow-remote-merge
-    #  follow-remote-merge develop
-
-    local target="$2"
+    local target="$1"
     local source
-    source=$(git branch --show-current)
+    source=$($GIT_CMD branch --show-current)
 
     $GIT_CMD fetch origin "${target}:${target}"
 
@@ -126,10 +116,10 @@ function has-no-diff-commit() {
     # Iterate over all commits between mergeBase and the target branch and
     # check if to one of these the diff is empty. This allows to detect squash
     # merges at any point in the history.
-    mergeBase="$($GIT_CMD merge-base --fork-point "$target")"
+    mergeBase="$($GIT_CMD merge-base HEAD "$target")"
     $GIT_CMD log "$mergeBase".."$target" --oneline |
         cut -f1 -d ' ' |
-        xargs -I% -n1 bash -c "echo $GIT_CMD diff --quiet %; echo \$?" |
+        xargs -I% -n1 bash -c "$GIT_CMD diff --quiet %; echo \$?" |
         grep -q 0
 }
 
