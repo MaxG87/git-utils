@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+set -eu
+
+function print-usage() {
+    cat <<EOF
+$0: [OPTION]... [target-branch]
+
+Follow a merge that was performed on a remote platform, e.g. GitHub or GitLab.
+If HEAD is contained in the target branch, HEAD is switched to the target
+branch and the source branch is deleted.
+
+The target branch defaults to \`develop\`, \`main\`, or \`master\`, in that
+order.
+
+OPTIONS:
+
+  -C DIRECTORY Execute git commands in DIRECTORY. Defaults to PWD.
+  -f, --force  Skip checks when moving to target branch.
+  -h, --help   Print this message and exit.
+
+Examples:
+follow-remote-merge
+follow-remote-merge develop
+follow-remote-merge -C ~/repos/some-repo -f weird-default-branch
+EOF
+}
+
+function die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    echo "$msg" >&2
+    exit "$code"
+}
+
+function main() {
+
+    local workingDirectory=.
+    local targetBranch
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h | --help)
+                print-usage
+                exit 0
+                ;;
+            -C)
+                shift
+                workingDirectory="$1"
+                ;;
+            -f | --force)
+                die "Force intended but not yet supported!"
+                ;;
+            *)
+                targetBranch="$1"
+                ;;
+        esac
+        shift
+    done
+
+    test -d "$workingDirectory" ||
+        die "Working directory $workingDirectory does not exist!"
+    GIT_CMD="git -C $workingDirectory"
+
+    if [[ ! -v targetBranch ]]; then
+        targetBranch=$(get-default-target-branch)
+    fi
+    branch-exists "$targetBranch" ||
+        die "Target branch $targetBranch does not exist!"
+
+    follow-remote-merge "$targetBranch"
+}
+
+function branch-exists() {
+    $GIT_CMD show-ref --quiet refs/heads/"$1"
+}
+
+function get-default-target-branch() {
+    for branch in develop main master; do
+        if branch-exists $branch; then
+            echo $branch
+            return
+        fi
+    done
+    echo "None of the default branches exist!" >&2
+    exit 1
+}
+
+function follow-remote-merge() {
+    local target="$1"
+    local source
+    source=$($GIT_CMD branch --show-current)
+
+    $GIT_CMD fetch origin "${target}:${target}"
+
+    $GIT_CMD diff --quiet ||
+        die "Found uncommitted changes in ${source}."
+
+    if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
+        $GIT_CMD switch "${target}"
+        $GIT_CMD branch -D "${source}"
+    else
+        die "Found unmerged changes in ${source}."
+    fi
+}
+
+function has-no-diff-commit() {
+    local target="$1"
+    local mergeBase
+
+    if is-ancestor-to "$target"; then
+        # efficient case first
+        return 0
+    fi
+
+    # Iterate over all commits between mergeBase and the target branch and
+    # check if to one of these the diff is empty. This allows to detect squash
+    # merges at any point in the history.
+    mergeBase="$($GIT_CMD merge-base HEAD "$target")"
+    $GIT_CMD log "$mergeBase".."$target" --oneline |
+        cut -f1 -d ' ' |
+        xargs -I% -n1 bash -c "$GIT_CMD diff --quiet %; echo \$?" |
+        grep -q 0
+}
+
+function is-ancestor-to() {
+    local target="$1"
+    $GIT_CMD merge-base --is-ancestor HEAD "$target"
+}
+
+main "$@"
