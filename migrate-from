@@ -33,17 +33,18 @@ function main() {
         shift
     done
 
-    if [[ ! -v remoteUri ]]; then
+    [[ -v remoteUri ]] ||
         die "Remote URI is required!"
-    fi
+    test -d "$workingDirectory" ||
+        die "Working directory $workingDirectory does not exist!"
+    GIT_CMD="git -C $workingDirectory"
+
     if [[ ! -v srcBranch ]]; then
         srcBranch=$(git ls-remote --symref "$remoteUri" HEAD | head -n1 | awk '{print $2}')
         srcBranch=${srcBranch##refs/heads/}
     fi
-
-    test -d "$workingDirectory" ||
-        die "Working directory $workingDirectory does not exist!"
-    GIT_CMD="git -C $workingDirectory"
+    branch-exists "$remoteUri" "$srcBranch" ||
+        die "Branch $srcBranch does not exist in $remoteUri!"
 
     migrate-from "$UUID" "$remoteUri" "$srcBranch"
 }
@@ -82,7 +83,9 @@ function die() {
 }
 
 function branch-exists() {
-    $GIT_CMD show-ref --quiet refs/heads/"$1"
+    local remoteUri="$1"
+    local srcBranch="$2"
+    git ls-remote --symref "$remoteUri" "$srcBranch" | grep -q .
 }
 
 function migrate-from() {
