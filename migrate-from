@@ -2,41 +2,13 @@
 
 set -eu
 
-function print-usage() {
-    cat <<EOF
-$0: [OPTION]... [target-branch]
-
-Follow a merge that was performed on a remote platform, e.g. GitHub or GitLab.
-If HEAD is contained in the target branch, HEAD is switched to the target
-branch and the source branch is deleted.
-
-The target branch defaults to \`develop\`, \`main\`, or \`master\`, in that
-order.
-
-OPTIONS:
-
-  -C DIRECTORY Execute git commands in DIRECTORY. Defaults to PWD.
-  -f, --force  Skip checks when moving to target branch.
-  -h, --help   Print this message and exit.
-
-Examples:
-follow-remote-merge
-follow-remote-merge develop
-follow-remote-merge -C ~/repos/some-repo -f weird-default-branch
-EOF
-}
-
-function die() {
-    local msg=$1
-    local code=${2-1} # default exit status 1
-    echo "$msg" >&2
-    exit "$code"
-}
-
 function main() {
 
     local workingDirectory=.
-    local targetBranch
+    local remoteUri
+    local srcBranch
+    local UUID
+    UUID=$(cat /proc/sys/kernel/random/uuid)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -48,51 +20,80 @@ function main() {
                 shift
                 workingDirectory="$1"
                 ;;
-            -f | --force)
-                die "Force intended but not yet supported!"
-                ;;
             *)
-                targetBranch="$1"
+                if [[ ! -v remoteUri ]]; then
+                    remoteUri="$1"
+                elif [[ ! -v srcBranch ]]; then
+                    srcBranch="$1"
+                else
+                    die "Too many arguments given!"
+                fi
                 ;;
         esac
         shift
     done
 
+    if [[ ! -v remoteUri ]]; then
+        die "Remote URI is required!"
+    fi
+    if [[ ! -v srcBranch ]]; then
+        srcBranch=$(git ls-remote --symref "$remoteUri" HEAD | head -n1 | awk '{print $2}')
+        srcBranch=${srcBranch##refs/heads/}
+    fi
+
     test -d "$workingDirectory" ||
         die "Working directory $workingDirectory does not exist!"
     GIT_CMD="git -C $workingDirectory"
 
-    if [[ ! -v targetBranch ]]; then
-        targetBranch=$(get-default-target-branch)
-    fi
-    branch-exists "$targetBranch" ||
-        die "Target branch $targetBranch does not exist!"
+    migrate-from "$UUID" "$remoteUri" "$srcBranch"
+}
 
-    migrate-from "$targetBranch"
+function print-usage() {
+    cat <<EOF
+$0: [OPTION]... REMOTE_URI [SRC_BRANCH]
+
+Set the current branch to a branch from a remote repository. The history of
+HEAD is lost and replaced with the history of the source branch.
+
+IF SRC_BRANCH is not given, the default branch of the remote repository is used.
+
+The REMOTE_URI is the URI of the remote repository. It can be a URL or a path to
+a local repository. It will be added to the current repository as a remote
+repository with a random name but removed after the operation.
+
+
+OPTIONS:
+
+  -C DIRECTORY Execute git commands in DIRECTORY. Defaults to PWD.
+  -h, --help   Print this message and exit.
+
+Examples:
+migrate-from "/path/to/repo"
+migrate-from "/path/to/repo" develop
+migrate-from "git@github.com:MaxG87/git-utils.git"
+EOF
+}
+
+function die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    echo "$msg" >&2
+    exit "$code"
 }
 
 function branch-exists() {
     $GIT_CMD show-ref --quiet refs/heads/"$1"
 }
 
-function get-default-target-branch() {
-    for branch in develop main master; do
-        if branch-exists $branch; then
-            echo $branch
-            return
-        fi
-    done
-    echo "None of the default branches exist!" >&2
-    exit 1
-}
-
 function migrate-from() {
-    UUID="$(cat /proc/sys/kernel/random/uuid)"
-    SRC_BRANCH="${UUID}/${2:-main}"
-    git remote add "$UUID" "$1"
-    git fetch "$UUID"
-    git reset --hard "${SRC_BRANCH}"
-    git remote remove "$UUID"
+    local REMOTE_NAME="$1"
+    local REMOTE_URI="$2"
+    local SRC_BRANCH="$3"
+    local SRC_BRANCH_FULL_NAME="${REMOTE_NAME}/${SRC_BRANCH}"
+    $GIT_CMD remote add "$REMOTE_NAME" "$REMOTE_URI"
+    $GIT_CMD fetch "$REMOTE_NAME"
+    $GIT_CMD reset --hard "${SRC_BRANCH_FULL_NAME}"
+    $GIT_CMD remote remove "$REMOTE_NAME"
 }
 
 main "$@"
