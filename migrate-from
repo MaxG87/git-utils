@@ -53,8 +53,9 @@ function print-usage() {
     cat <<EOF
 $0: [OPTION]... REMOTE_URI [SRC_BRANCH]
 
-Set the current branch to a branch from a remote repository. The history of
-HEAD is lost and replaced with the history of the source branch.
+Set the currently active local branch to SRC_BRANCH from the repository at
+REMOTE_URI. The history of the local branch is lost and replaced with the
+history of SRC_BRANCH.
 
 IF SRC_BRANCH is not given, the default branch of the remote repository is used.
 
