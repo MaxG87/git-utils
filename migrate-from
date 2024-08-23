@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+set -eu
+
+function main() {
+
+    local workingDirectory=.
+    local remoteUri
+    local srcBranch
+    local UUID
+    UUID=$(cat /proc/sys/kernel/random/uuid)
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h | --help)
+                print-usage
+                exit 0
+                ;;
+            -C)
+                shift
+                workingDirectory="$1"
+                ;;
+            *)
+                if [[ ! -v remoteUri ]]; then
+                    remoteUri="$1"
+                elif [[ ! -v srcBranch ]]; then
+                    srcBranch="$1"
+                else
+                    die "Too many arguments given!"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    [[ -v remoteUri ]] ||
+        die "Remote URI is required!"
+    test -d "$workingDirectory" ||
+        die "Working directory $workingDirectory does not exist!"
+    GIT_CMD="git -C $workingDirectory"
+
+    if [[ ! -v srcBranch ]]; then
+        srcBranch=$(git ls-remote --symref "$remoteUri" HEAD | head -n1 | awk '{print $2}')
+        srcBranch=${srcBranch##refs/heads/}
+    fi
+    branch-exists "$remoteUri" "$srcBranch" ||
+        die "Branch $srcBranch does not exist in $remoteUri!"
+
+    migrate-from "$UUID" "$remoteUri" "$srcBranch"
+}
+
+function print-usage() {
+    cat <<EOF
+$0: [OPTION]... REMOTE_URI [SRC_BRANCH]
+
+Set the currently active local branch to SRC_BRANCH from the repository at
+REMOTE_URI. The history of the local branch is lost and replaced with the
+history of SRC_BRANCH.
+
+IF SRC_BRANCH is not given, the default branch of the remote repository is used.
+
+The REMOTE_URI is the URI of the remote repository. It can be a URL or a path to
+a local repository. It will be added to the current repository as a remote
+repository with a random name but removed after the operation.
+
+
+OPTIONS:
+
+  -C DIRECTORY Execute git commands in DIRECTORY. Defaults to PWD.
+  -h, --help   Print this message and exit.
+
+Examples:
+migrate-from "/path/to/repo"
+migrate-from "/path/to/repo" develop
+migrate-from "git@github.com:MaxG87/git-utils.git"
+EOF
+}
+
+function die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    echo "$msg" >&2
+    exit "$code"
+}
+
+function branch-exists() {
+    local remoteUri="$1"
+    local srcBranch="$2"
+    git ls-remote --symref "$remoteUri" "$srcBranch" | grep -q .
+}
+
+function migrate-from() {
+    local REMOTE_NAME="$1"
+    local REMOTE_URI="$2"
+    local SRC_BRANCH="$3"
+    local SRC_BRANCH_FULL_NAME="${REMOTE_NAME}/${SRC_BRANCH}"
+    $GIT_CMD remote add "$REMOTE_NAME" "$REMOTE_URI"
+    $GIT_CMD fetch "$REMOTE_NAME"
+    $GIT_CMD reset --hard "${SRC_BRANCH_FULL_NAME}"
+    $GIT_CMD remote remove "$REMOTE_NAME"
+}
+
+main "$@"
