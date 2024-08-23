@@ -63,3 +63,31 @@ migrate-from "/path/to/repo"
 migrate-from "/path/to/repo" develop
 migrate-from "git@github.com:MaxG87/git-utils.git"
 ```
+
+## do-on-all-gits
+### Installation
+
+Either `sudo install do-on-all-gits /usr/local/bin` or `install do-on-all-gits ~/.local/bin`.
+
+### Usage
+
+```
+./do-on-all-gits: [OPTION]... -- COMMAND
+
+Execute COMMAND in all git repositories found in the working directory.
+
+OPTIONS:
+
+  -C DIRECTORY Parent directory of the git repositories. Default is the current
+               directory.
+  -I STRING    Replace occurrences of STRING in COMMAND with the path to the
+               git repository. Default is '%'.
+  -P N         Run up to N processes in parallel. Default is 0, meaning run as
+               many processes as possible.
+  -h, --help   Print this message and exit.
+
+
+Examples:
+do-on-all-gits -P 4 -I % -- git -C % pull
+do-on-all-gits -C ~/repositories -I % -- echo "Repository: %"
+```
