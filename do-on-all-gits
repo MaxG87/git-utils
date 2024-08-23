@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+function main() {
+
+    local cmd
+    local maxProcs=0
+    local replaceStr=%
+    local workingDir=.
+    declare -a cmd
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h | --help)
+                print-usage
+                exit 0
+                ;;
+            -C)
+                shift
+                workingDir="$1"
+                ;;
+            -I)
+                shift
+                replaceStr="$1"
+                ;;
+            -P)
+                shift
+                maxProcs="$1"
+                ;;
+            --)
+                shift
+                cmd=("${@}")
+                break
+                ;;
+            *)
+                die "Unknown option: $1"
+                ;;
+        esac
+        shift
+    done
+
+    # shellcheck disable=SC2038
+    find "$workingDir" -type d -iname .git -exec dirname {} + |
+        xargs -P "$maxProcs" -I "$replaceStr" "${cmd[@]}"
+
+}
+
+function print-usage() {
+    cat <<EOF
+$0: [OPTION]... -- COMMAND
+
+Execute COMMAND in all git repositories found in the working directory.
+
+OPTIONS:
+
+  -C DIRECTORY Parent directory of the git repositories. Default is the current
+               directory.
+  -I STRING    Replace occurrences of STRING in COMMAND with the path to the
+               git repository. Default is '%'.
+  -P N         Run up to N processes in parallel. Default is 0, meaning run as
+               many processes as possible.
+  -h, --help   Print this message and exit.
+
+
+Examples:
+do-on-all-gits -P 4 -I % -- git -C % pull
+do-on-all-gits -C ~/repositories -I % -- echo "Repository: %"
+EOF
+}
+
+function die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    echo "$msg" >&2
+    exit "$code"
+}
+
+main "$@"
