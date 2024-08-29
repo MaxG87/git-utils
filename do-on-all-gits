@@ -53,6 +53,15 @@ $0: [OPTION]... [--] COMMAND
 
 Execute COMMAND in all git repositories found in the working directory.
 
+The first token not matching an option is considered to be start of COMMAND to
+run in each repository. If unsure, use '--' to mark the end of options.
+
+Be aware that all kind of shell expansions happen before the command is
+executed. In particular, globbing (e.g. '*.png') will match files in the
+current directory, not in the git repositories. In order to achieve this, you
+need to run the command in a subshell, e.g. 'sh -c "echo *.png"'.
+
+
 OPTIONS:
 
   -C DIRECTORY Parent directory of the git repositories. Default is the current
