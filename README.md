@@ -72,9 +72,18 @@ Either `sudo install do-on-all-gits /usr/local/bin` or `install do-on-all-gits ~
 ### Usage
 
 ```
-./do-on-all-gits: [OPTION]... -- COMMAND
+./do-on-all-gits: [OPTION]... [--] COMMAND
 
 Execute COMMAND in all git repositories found in the working directory.
+
+The first token not matching an option is considered to be start of COMMAND to
+run in each repository. If unsure, use '--' to mark the end of options.
+
+Be aware that all kind of shell expansions happen before the command is
+executed. In particular, globbing (e.g. '*.png') will match files in the
+current directory, not in the git repositories. In order to achieve this, you
+need to run the command in a subshell, e.g. 'sh -c "echo *.png"'.
+
 
 OPTIONS:
 
@@ -85,6 +94,7 @@ OPTIONS:
   -P N         Run up to N processes in parallel. Default is 0, meaning run as
                many processes as possible.
   -h, --help   Print this message and exit.
+  --           End of options. The COMMAND must be specified after this.
 
 
 Examples:
