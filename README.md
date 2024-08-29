@@ -3,10 +3,18 @@
 This repository collects some utilities which are required on a frequent basis
 but too complex for a Bash one-liner.
 
-## follow-remote-merge
-### Installation
+## Installation
 
-Either `sudo install follow-remote-merge /usr/local/bin` or `install follow-remote-merge ~/.local/bin`.
+The explanation assumes that all scripts were downloaded already. The most
+convenient way to do this is to clone the repository.
+
+Installation of the scripts is done by copying them to a directory in the
+`PATH` and to make them executable. For a system-wide installation, `sudo
+install <SCRIPT> /usr/local/bin` can be used. For an installation only for the
+current user, `install <SCRIPT> ~/.local/bin` is recommended.
+
+
+## follow-remote-merge
 
 ### Usage
 
@@ -33,9 +41,6 @@ follow-remote-merge -C ~/repos/some-repo -f weird-default-branch
 ```
 
 ## migrate-from
-### Installation
-
-Either `sudo install migrate-from /usr/local/bin` or `install migrate-from ~/.local/bin`.
 
 ### Usage
 
@@ -65,9 +70,6 @@ migrate-from "git@github.com:MaxG87/git-utils.git"
 ```
 
 ## do-on-all-gits
-### Installation
-
-Either `sudo install do-on-all-gits /usr/local/bin` or `install do-on-all-gits ~/.local/bin`.
 
 ### Usage
 
