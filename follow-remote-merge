@@ -88,8 +88,10 @@ function get-default-target-branch() {
 
 function follow-remote-merge() {
     local target="$1"
-    local source
+    local source upstream_remote upstream_branch
     source=$($GIT_CMD branch --show-current)
+    upstream_remote=$(git config --get "branch.${source}.remote")
+    upstream_branch=$(git config --get "branch.${source}.merge" | sed 's|refs/heads/||')
 
     $GIT_CMD fetch origin "${target}:${target}"
 
@@ -99,6 +101,8 @@ function follow-remote-merge() {
     if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
         $GIT_CMD switch "${target}"
         $GIT_CMD branch -D "${source}"
+        $GIT_CMD push "$upstream_remote" --delete "$upstream_branch" ||
+            echo "Could not delete remote branch ${upstream_branch} on ${upstream_remote}."
     else
         die "Found unmerged changes in ${source}."
     fi
