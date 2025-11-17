@@ -91,10 +91,10 @@ function follow-remote-merge() {
     local target="$1"
     local source upstream_remote upstream_branch
     source=$($GIT_CMD branch --show-current)
-    upstream_remote=$(git config --get "branch.${source}.remote")
-    upstream_branch=$(git config --get "branch.${source}.merge" | sed 's|refs/heads/||')
+    upstream_remote=$(get-remote-of "$source")
+    upstream_branch=$(get-upstream-of "$source")
 
-    $GIT_CMD fetch origin "${target}:${target}"
+    update-local-target-branch "$target"
 
     $GIT_CMD diff --quiet ||
         die "Found uncommitted changes in ${source}."
@@ -109,6 +109,38 @@ function follow-remote-merge() {
     else
         die "Found unmerged changes in ${source}."
     fi
+}
+
+function get-remote-of() {
+    local branch="$1"
+    $GIT_CMD config --get "branch.${branch}.remote"
+}
+
+function get-upstream-of() {
+    local branch="$1"
+    $GIT_CMD config --get "branch.${branch}.merge" | sed 's|refs/heads/||'
+}
+
+function update-local-target-branch() {
+    local target="$1"
+    local remote targetUpstream
+    remote=$(get-remote-of "$target")
+    targetUpstream=$(get-upstream-of "$target")
+    git fetch "$remote" >/dev/null ||
+        die "Could not fetch from remote ${remote}."
+    fullRemoteBranch="${remote}/${targetUpstream}"
+
+    localTargetRev=$($GIT_CMD rev-parse "$target")
+    remoteTargetRev=$($GIT_CMD rev-parse "${fullRemoteBranch}")
+    if git merge-base --is-ancestor "${fullRemoteBranch}" "$target" &&
+        [[ "${localTargetRev}" != "${remoteTargetRev}" ]]; then
+        die "Local target branch ${target} is ahead of ${fullRemoteBranch}. Please resolve manually!"
+    elif ! git merge-base --is-ancestor "$target" "${fullRemoteBranch}"; then
+        die "Local target branch ${target} cannot be fast-forwarded to ${fullRemoteBranch}."
+    fi
+    $GIT_CMD fetch "$remote" "$targetUpstream":"$target" >/dev/null ||
+        die "Could not update local target branch ${target}."
+
 }
 
 function has-no-diff-commit() {
