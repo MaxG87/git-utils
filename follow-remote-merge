@@ -100,7 +100,8 @@ function follow-remote-merge() {
 
     if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
         $GIT_CMD switch "${target}"
-        $GIT_CMD branch -D "${source}"
+        $GIT_CMD branch -D "${source}" >/dev/null ||
+            die "Could not delete local branch ${source}."
         if upstream-branch-exists "$upstream_remote" "$upstream_branch"; then
             remove-upstream-branch "$upstream_remote" "$upstream_branch"
         fi
