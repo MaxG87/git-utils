@@ -64,6 +64,7 @@ function main() {
 
     if [[ ! -v targetBranch ]]; then
         targetBranch=$(get-default-target-branch)
+        echo "No target branch specified, using '${targetBranch}'."
     fi
     branch-exists "$targetBranch" ||
         die "Target branch $targetBranch does not exist!"
