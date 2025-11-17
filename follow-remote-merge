@@ -101,8 +101,9 @@ function follow-remote-merge() {
     if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
         $GIT_CMD switch "${target}"
         $GIT_CMD branch -D "${source}"
-        $GIT_CMD push "$upstream_remote" --delete "$upstream_branch" ||
-            echo "Could not delete remote branch ${upstream_branch} on ${upstream_remote}."
+        if upstream-branch-exists "$upstream_remote" "$upstream_branch"; then
+            remove-upstream-branch "$upstream_remote" "$upstream_branch"
+        fi
     else
         die "Found unmerged changes in ${source}."
     fi
@@ -130,6 +131,19 @@ function has-no-diff-commit() {
 function is-ancestor-to() {
     local target="$1"
     $GIT_CMD merge-base --is-ancestor HEAD "$target"
+}
+
+function upstream-branch-exists() {
+    local remote="$1"
+    local upstream_branch="$2"
+    $GIT_CMD ls-remote --exit-code --heads "$remote" "${upstream_branch}" >/dev/null
+}
+
+function remove-upstream-branch() {
+    local remote="$1"
+    local upstream_branch="$2"
+    $GIT_CMD push "${remote}" --delete "${upstream_branch}" &>/dev/null ||
+        die "Could not delete remote branch ${upstream_branch} on ${remote}."
 }
 
 main "$@"
