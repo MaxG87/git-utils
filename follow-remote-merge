@@ -138,6 +138,7 @@ function update-local-target-branch() {
     elif ! git merge-base --is-ancestor "$target" "${fullRemoteBranch}"; then
         die "Local target branch ${target} cannot be fast-forwarded to ${fullRemoteBranch}."
     fi
+    # TODO: Consider using local only options to avoid network calls.
     $GIT_CMD fetch "$remote" "$targetUpstream":"$target" >/dev/null ||
         die "Could not update local target branch ${target}."
 
