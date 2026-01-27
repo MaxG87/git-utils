@@ -98,16 +98,15 @@ function follow-remote-merge() {
         die "Found uncommitted changes in ${source}."
 
     if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
-        $GIT_CMD switch "${target}" >/dev/null
-        $GIT_CMD branch -D "${source}" >/dev/null ||
-            die "Could not delete local branch ${source}."
-
-        local upstream_remote upstream_branch
         if upstream_remote=$(get-remote-of "$source") &&
             upstream_branch=$(get-upstream-of "$source") &&
             upstream-branch-exists "$upstream_remote" "$upstream_branch"; then
             remove-upstream-branch "$upstream_remote" "$upstream_branch"
         fi
+
+        $GIT_CMD switch "${target}" >/dev/null
+        $GIT_CMD branch -D "${source}" >/dev/null ||
+            die "Could not delete local branch ${source}."
     else
         die "Found unmerged changes in ${source}."
     fi
