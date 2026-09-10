@@ -69,9 +69,6 @@ function main() {
     if ! branch-exists "$targetBranch"; then
         die "Target branch $targetBranch does not exist!"
     fi
-    if is-ancestor-to "$targetBranch" HEAD; then
-        die "Target branch $targetBranch is an ancestor of HEAD. No merge to follow."
-    fi
 
     follow-remote-merge "$targetBranch"
 }
@@ -100,6 +97,10 @@ function follow-remote-merge() {
 
     $GIT_CMD diff --quiet ||
         die "Found uncommitted changes in ${source}."
+
+    if is-ancestor-to "$targetBranch" HEAD; then
+        die "Target branch $targetBranch is an ancestor of HEAD. No merge to follow."
+    fi
 
     if is-ancestor-to HEAD "$target" || has-no-diff-commit "$target"; then
         if upstream_remote=$(get-remote-of "$source") &&
