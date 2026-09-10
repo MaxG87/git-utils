@@ -66,8 +66,12 @@ function main() {
         targetBranch=$(get-default-target-branch)
         echo "No target branch specified, using '${targetBranch}'."
     fi
-    branch-exists "$targetBranch" ||
+    if ! branch-exists "$targetBranch"; then
         die "Target branch $targetBranch does not exist!"
+    fi
+    if is-ancestor-to "$targetBranch" HEAD; then
+        die "Target branch $targetBranch is an ancestor of HEAD. No merge to follow."
+    fi
 
     follow-remote-merge "$targetBranch"
 }
@@ -97,7 +101,7 @@ function follow-remote-merge() {
     $GIT_CMD diff --quiet ||
         die "Found uncommitted changes in ${source}."
 
-    if is-ancestor-to "$target" || has-no-diff-commit "$target"; then
+    if is-ancestor-to HEAD "$target" || has-no-diff-commit "$target"; then
         if upstream_remote=$(get-remote-of "$source") &&
             upstream_branch=$(get-upstream-of "$source") &&
             upstream-branch-exists "$upstream_remote" "$upstream_branch"; then
@@ -149,7 +153,7 @@ function has-no-diff-commit() {
     local target="$1"
     local mergeBase
 
-    if is-ancestor-to "$target"; then
+    if is-ancestor-to HEAD "$target"; then
         # efficient case first
         return 0
     fi
@@ -165,8 +169,9 @@ function has-no-diff-commit() {
 }
 
 function is-ancestor-to() {
-    local target="$1"
-    $GIT_CMD merge-base --is-ancestor HEAD "$target"
+    local source="$1"
+    local target="$2"
+    $GIT_CMD merge-base --is-ancestor "$source" "$target"
 }
 
 function upstream-branch-exists() {
