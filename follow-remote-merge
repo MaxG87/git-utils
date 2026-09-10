@@ -35,7 +35,7 @@ function die() {
 
 function main() {
 
-    local workingDirectory=.
+    workingDirectory=.
     local targetBranch
 
     while [[ $# -gt 0 ]]; do
@@ -162,9 +162,14 @@ function has-no-diff-commit() {
     # check if to one of these the diff is empty. This allows to detect squash
     # merges at any point in the history.
     mergeBase="$($GIT_CMD merge-base HEAD "$target")"
+    # Suppress false positive in bash -c command. It is intended that the
+    # variables wont expand.
+    # shellcheck disable=SC2016
     $GIT_CMD log "$mergeBase".."$target" --oneline |
         cut -f1 -d ' ' |
-        xargs -I% -n1 bash -c "$GIT_CMD diff --quiet %; echo \$?" |
+        xargs -I% -n1 bash -c \
+            'git -C "$1" diff --quiet "$2"; echo $?' \
+            _ "$workingDirectory" % |
         grep -q 0
 }
 
