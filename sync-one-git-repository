@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# sync-one-repo <repo-verzeichnis>
+#
+# Synchronisiert genau ein Git-Repository (fetch --all --prune + pull)
+# und gibt genau eine Ergebniszeile auf stdout aus:
+#
+#   STATUS|repo_dir|meldung
+#
+# STATUS ist eines von: OK, NO_REMOTE, REMOTE_GONE, FAIL
+#
+set -uo pipefail
+
+repo_dir="${1:?Usage: sync-one-repo <repo-verzeichnis>}"
+
+GIT=(git -C "$repo_dir")
+
+# Kein Remote konfiguriert
+if [ -z "$("${GIT[@]}" remote 2>/dev/null)" ]; then
+    echo "NO_REMOTE|$repo_dir|kein Remote konfiguriert"
+    exit 0
+fi
+
+fetch_log="$("${GIT[@]}" fetch --all --prune 2>&1)"
+fetch_rc=$?
+
+if [ $fetch_rc -ne 0 ]; then
+    # Typische Meldungen, wenn das Remote-Repo nicht mehr existiert
+    # (z.B. in GitLab/GitHub gelöscht):
+    #   "fatal: repository '...' not found"
+    #   "ERROR: Project not found" / "The project you were looking for could not be found"
+    #   "remote: Repository not found"
+    #   "fatal: could not read from remote repository" (oft in Kombination mit obigem)
+    #
+    remote_gone_pattern='(not found|does not exist|could not be found|repository .* not found)'
+    if echo "$fetch_log" | grep -qiE "$remote_gone_pattern"; then
+        # Nicht die letzte Zeile nehmen: GitLab/GitHub-Fehlermeldungen sind oft
+        # mehrzeilig, die letzte Zeile ist dann nur ein Satzfragment
+        # ("... and the repository exists."). Stattdessen die Zeile nehmen,
+        # die tatsächlich das Muster enthielt.
+        match_line="$(echo "$fetch_log" | grep -iE "$remote_gone_pattern" | head -n1)"
+        echo "REMOTE_GONE|$repo_dir|${match_line# }"
+    else
+        echo "FAIL|$repo_dir|fetch fehlgeschlagen: $(echo "$fetch_log" | tail -n1)"
+    fi
+    exit 1
+fi
+
+if ! "${GIT[@]}" symbolic-ref -q HEAD &>/dev/null; then
+    # Repository ist nicht auf einem Branch
+    echo "FAIL|$repo_dir|Repository ist nicht auf einem Branch"
+    exit 1
+fi
+
+if ! "${GIT[@]}" rev-parse --abbrev-ref --symbolic-full-name "@{u}" &>/dev/null; then
+    # Branch hat keinen Upstream-Tracking-Branch
+    branch_name="$("${GIT[@]}" branch --show-current)"
+    echo "FAIL|$repo_dir|kein Upstream-Tracking-Branch für '${branch_name}' konfiguriert"
+    exit 1
+fi
+
+# Branch hat einen Upstream-Tracking-Branch
+pull_log="$("${GIT[@]}" pull 2>&1)"
+pull_rc=$?
+if [ $pull_rc -ne 0 ]; then
+    echo "FAIL|$repo_dir|pull fehlgeschlagen: $(echo "$pull_log" | tail -n1)"
+    exit 1
+fi
+
+echo "OK|$repo_dir|"

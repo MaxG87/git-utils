@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# fetch-all-git [Startverzeichnis]
+#
+# Synchronisiert alle Git-Repositories unterhalb des Startverzeichnisses
+# (Default: .) ueber sync-one-git-repository. Die Verteilung/Parallelisierung übernimmt
+# do-on-all-gits. Am Ende werden alle Repos mit Problemen aufgelistet (kein
+# Remote, Remote existiert nicht mehr, oder sonstiger fetch/pull-Fehler).
+#
+set -uo pipefail
+
+SYNC_SCRIPT="sync-one-git-repository"
+START_DIR="${1:-.}"
+JOBS="$((5 * $(nproc)))"
+
+if ! command -v "$SYNC_SCRIPT" >/dev/null 2>&1; then
+    echo "Fehler: $SYNC_SCRIPT fehlt oder ist nicht ausfuehrbar." >&2
+    exit 2
+fi
+
+if ! command -v do-on-all-gits >/dev/null 2>&1; then
+    echo "Fehler: do-on-all-gits nicht gefunden (siehe github.com/MaxG87/git-utils)." >&2
+    exit 2
+fi
+
+RESULTS_FILE="$(mktemp)"
+trap 'rm -f "$RESULTS_FILE"' EXIT
+
+do-on-all-gits -C "$START_DIR" -P "$JOBS" -I % -- "$SYNC_SCRIPT" % >>"$RESULTS_FILE"
+
+echo
+echo "=== Zusammenfassung ==="
+
+total="$(wc -l <"$RESULTS_FILE")"
+ok="$(grep -c '^OK' "$RESULTS_FILE" || true)"
+no_remote="$(grep -c '^NO_REMOTE' "$RESULTS_FILE" || true)"
+remote_gone="$(grep -c '^REMOTE_GONE' "$RESULTS_FILE" || true)"
+fail="$(grep -c '^FAIL' "$RESULTS_FILE" || true)"
+
+echo "Repos gesamt: $total, erfolgreich: $ok"
+
+if [ "$((no_remote + remote_gone + fail))" -gt 0 ]; then
+    echo
+    echo "Repos mit Problemen:"
+    grep -E '^(NO_REMOTE|REMOTE_GONE|FAIL)' "$RESULTS_FILE" |
+        while IFS='|' read -r status repo reason; do
+            printf '  - [%s] %s: %s\n' "$status" "$repo" "$reason"
+        done
+    exit 1
+fi
